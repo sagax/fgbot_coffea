@@ -117,4 +117,124 @@ Client::_useStream = (stream, network, throttling, info) ->
 
   stream.coffea_id
 
+Client::useStream = (stream, network) ->
+  @_useStream stream, network, network.throttling, network
+  return
+
+Client::reconnect = (stream_id) ->
+  info = @stinfo[stream_id]
+  stream = (if info.ssl then tls.connect(
+    host: info.host
+    port: info.port
+  ) else (
+    host: info.host
+    port: info.port
+  ))
+  return
+
+Client::_emitConnect = (network) ->
+  utils.emit @, network, 'connect', null
+  return
+
+Client::_setupSASL = (stream_id, info) ->
+  @on 'cap_ack', (err, event) ->
+    if event.capabilities is 'sasl'
+      @sasl.mechanism 'PLAIN', stream_id
+      if info.sasl and info.sasl.account and info.sasl.password
+        @sasl.login info.sasl.account, info.sasl.password, stream_id
+      else if info.sasl and info.sasl.password
+        @sasl.login info.username, info.sasl.password, stream_id
+      else
+        @sasl.login null, null, stream_id
+    return
+  return
+
+Client::_connect = (stream_id, info) ->
+  @_setupSASL stream_id, info
+  if info.pass
+    @pass info.pass
+  @capReq [
+    'account-notify'
+    'away-notify'
+    'extended-join'
+    'sasl'
+  ], stream_id
+  @capEnd stream_id
+  @nick info.nick, stream_id
+  @user info.username, info.realname, stream_id
+  if info.nickserv and info.nickserv.username and info.nickserv.password
+    @identify info.nickserv.username, info.nickserv.password, stream_id
+  else if info.nickserv and info.nickserv.password
+    @identify info.nickserv.password, stream_id
+
+  if info.channels
+    @on 'motd', defaultOnMotd (err, event) ->
+      @join info.channels, stream_id
+      return
+  return
+
+Client::add = (info) ->
+  stream = undefined
+  stream_id = undefined
+  streams = []
+  _this = @
+  if info.instanceof Array
+    info.forEach (network) ->
+      stream = undefined
+      network = _this._check network
+      if network.ssl
+        stream = tls.connect
+          host: network.host
+          port: network.port
+          rejectUnauthorized: !network.ssl_allow_invalid
+          , ->
+            stream_id = _this._useStream stream, network.name, network.throttling, network
+            utils.emit _this, stream_id, 'ssl-error', new utils.SSLError stream.authorizationError
+            _this._connect stream_id, network
+            streams.push stream_id
+            _this._emitConnect stream_id
+            return
+      else
+        stream = net.connect
+          host: network.host
+          port: network.port
+          , ->
+            stream_id = _this._useStream stream, network.name, network.throttling, network
+            _this._connect stream_id, network
+            streams.push stream_id
+            _this._emitConnect stream_id
+            return
+      return
+  else if (typeof info is 'string') or (info instanceof Object and (info not instanceof StreamReadable) and (info not StreamReadable))
+    info = _this._check info
+    if info.ssl
+      stream = tls.connect
+        host: info.host
+        port: info.port
+        rejectUnauthorized: !info.ssl_allow_invalid
+        , ->
+          stream_id = _this._useStream stream, info.name, info.throttling, info
+          utils.emit _this, stream_id, 'ssl-error', new utils.SSLError stream.authorizationError
+          _this._connect stream_id, info
+          _this._emitConnect stream_id
+          return
+    else
+      stream = net.connect
+        host: info.host
+        port: info.port
+        , ->
+          stream_id = _this._useStream stream, info.name, info.throttling, info
+          _this._connect stream_id, info
+          _this._emitConnect stream_id
+          return
+  else
+    stream_id = @_useStream info, null, info.throttling, info
+
+  if streams.length is 0
+    stream_id
+  else
+    streams
+  return
+
+
 
