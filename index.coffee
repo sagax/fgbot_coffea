@@ -6,8 +6,9 @@ net            = require 'net'
 tls            = require 'tls'
 fs             = require 'fs'
 replies        = require 'irc-replies'
-StreamReadable = require('stream').Readable
-StreamWritable = require('stream').Writable
+stream_module  = require 'stream'
+StreamReadable = stream_module.Readable
+StreamWritable = stream_module.Writable
 utils          = require './lib/utils'
 RateLimiter    = require('limiter').RateLimiter
 
@@ -236,5 +237,43 @@ Client::add = (info) ->
     streams
   return
 
+Client::write = (str, network, fn) ->
+  if typeof network is 'function'
+    fn = network
+    network = undefined
 
+  if network isnt null and typeof network is 'object'
+    network = network.coffea_id
 
+  _this = @
+  if network and @streams.hasOwnProperty network
+    _this.streams[network].write str + '\r\n', fn
+  else
+    for id in @streams
+      if @streams.hasOwnProperty id
+        @write str, id
+    if fn
+      fn()
+  return
+
+Client::use = (fn) ->
+  fn @
+  @
+
+Client::fallbackCallback = (extended, event, fn, context) ->
+  params = utils.getParamNames fn
+  func = fn
+  if params.length is 1
+    func = (err, event) ->
+      fn event, err
+      return
+  extend.call @, event, func, context
+  return
+
+Client::on = (event, fn, context) ->
+  @fallbackCallback @parent.on, event, fn, context
+  return
+
+Client::once = (event, fn, context) ->
+  @fallbackCallback @parent.once, event, fn, context
+  return
