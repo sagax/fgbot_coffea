@@ -72,7 +72,6 @@ Client::_check = (network) ->
     ret.host = (if network.host is undefined then null else network.host)
 
   ret.name = network.name
-
   ret.nick = (if network.nick is undefined then randnick else network.nick)
   port = (if network.ssl is true then 6697 else 6667)
   ret.port = parseInt( if network.port is undefined then port else network.port )
@@ -81,15 +80,10 @@ Client::_check = (network) ->
   ret.username = (if network.username is undefined then ret.nick else network.username)
   ret.realname = (if network.realname is undefined then ret.nick else network.realname)
   ret.pass = network.pass
-
   ret.prefix = (if network.prefix is undefined then '!' else network.prefix)
-
   ret.channels = (if network.channels is undefined then ret.channels else network.channels)
-
   ret.throttling = network.throttling
-
   ret.sasl = (if network.sasl is undefined then null else networks.nickserv)
-
   ret
 
 Client::_useStream = (stream, network, throttling, info) ->
